@@ -1,15 +1,20 @@
 import argparse
 import os
 import shutil
-from langchain.document_loaders.pdf import PyPDFDirectoryLoader
+from langchain_community.document_loaders.pdf import PyPDFDirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.schema.document import Document
 from get_embedding_function import get_embedding_function
-from langchain.vectorstores.chroma import Chroma
+from langchain_chroma import Chroma
+import subprocess
+from query_functions import query_rag
+import requests
 
 
+OLLAMA_SERVER_COMMAND = ["ollama", "serve"]  # Example command to start the Ollama server
 CHROMA_PATH = "chroma"
 DATA_PATH = "data"
+DATA_PATH_1 = "/Users/tommaso/Downloads"
 
 
 def main():
@@ -22,10 +27,33 @@ def main():
         print("✨ Clearing Database")
         clear_database()
 
+    # Start the Ollama server
+    start_ollama_server()
+
     # Create (or update) the data store.
     documents = load_documents()
     chunks = split_documents(documents)
     add_to_chroma(chunks)
+
+    # Enter chatbot mode
+    start_chatbot()
+
+
+def start_ollama_server():
+    """Starts the Ollama local server if it's not already running."""
+    try:
+        # Check if the server is already running
+        response = requests.get('http://localhost:11434/models')
+        if response.status_code == 200:
+            print("✅ Ollama server is already running.")
+            return
+    except requests.ConnectionError:
+        print("🚀 Starting Ollama server...")
+        try:
+            subprocess.Popen(OLLAMA_SERVER_COMMAND, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            print("✅ Ollama server started successfully.")
+        except Exception as e:
+            print(f"❌ Failed to start Ollama server: {str(e)}")
 
 
 def load_documents():
@@ -100,6 +128,17 @@ def calculate_chunk_ids(chunks):
 
     return chunks
 
+
+def start_chatbot():
+    """Starts a loop asking for queries and responding using query_rag."""
+    print("\n💬 Enter 'exit' to stop the chatbot.")
+    while True:
+        query = input("\n📝 Ask a question: ")
+        if query.lower() == "exit":
+            print("👋 Exiting chatbot.")
+            break
+        response = query_rag(query)
+        print(f"🤖 {response}\n")
 
 def clear_database():
     if os.path.exists(CHROMA_PATH):
